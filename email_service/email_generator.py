@@ -3,17 +3,22 @@ from prefect import task
 from sqlalchemy import Row
 from database.models import DailyReportData, DimEmployee
 import csv
-import os 
+import os
 from typing import Any, Sequence, Tuple
+
 
 @task
 def generate_report_html(daily_data: DailyReportData) -> str:
     date_str = str(daily_data.date)
-    formatted_date = f"{date_str[6:]}/{date_str[4:6]}/{date_str[:4]}"  # Format date as DD/MM/YYYY
+    formatted_date = (
+        f"{date_str[6:]}/{date_str[4:6]}/{date_str[:4]}"  # Format date as DD/MM/YYYY
+    )
 
     # Prepare the absent employees string
     absent_employees_str = (
-        ", ".join([f"{e.last_name} {e.first_name}" for e in daily_data.employees_absent])
+        ", ".join(
+            [f"{e.last_name} {e.first_name}" for e in daily_data.employees_absent]
+        )
         if daily_data.employees_absent
         else "aucun"
     )
@@ -145,19 +150,17 @@ def generate_report_html(daily_data: DailyReportData) -> str:
     return html_report
 
 
-
-def generate_csv_from_employees(daily_data: Sequence[Row[Tuple[DimEmployee, Any, bool]]], filename: str):
-
-
+def generate_csv_from_employees(
+    daily_data: Sequence[Row[Tuple[DimEmployee, Any, bool]]], filename: str
+):
     def format_timedelta(td: timedelta) -> str:
         total_minutes = td.total_seconds() // 60
         hours = int(total_minutes // 60)
         minutes = int(total_minutes % 60)
         return f"{hours}h {minutes}m"
 
-
     os.makedirs("data", exist_ok=True)
-    with open(f"data/{filename}", mode='w', newline='', encoding='utf-8-sig') as file:
+    with open(f"data/{filename}", mode="w", newline="", encoding="utf-8-sig") as file:
         writer = csv.writer(file)
 
         # Header
@@ -170,7 +173,5 @@ def generate_csv_from_employees(daily_data: Sequence[Row[Tuple[DimEmployee, Any,
             work_duration = format_timedelta(row[1]) if present == "OUI" else "0"
 
             writer.writerow([last_name, first_name, present, work_duration])
-       
-
 
     return f"data/{filename}"

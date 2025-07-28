@@ -1,6 +1,6 @@
 from typing import Any, List, Optional
 from datetime import date, time
-from sqlalchemy import Date, ForeignKey, CheckConstraint, String, Tuple
+from sqlalchemy import Date, ForeignKey, CheckConstraint, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from database.enums import ContractType
@@ -26,7 +26,6 @@ MONTH_NAMES = [
 DAY_NAMES = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
 
-
 class AbsenceType(Base):
     __tablename__ = "dim_type_absence"
     __table_args__ = {"schema": "hr_data"}
@@ -45,9 +44,15 @@ class Absence(Base):
     __tablename__ = "fact_absence"
     __table_args__ = {"schema": "hr_data"}
 
-    id_employe: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_employee.id"), primary_key=True)
-    id_type_absence: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_type_absence.id"))
-    date_absence_id: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_date.date_id"), primary_key=True)
+    id_employe: Mapped[int] = mapped_column(
+        ForeignKey("hr_data.dim_employee.id"), primary_key=True
+    )
+    id_type_absence: Mapped[int] = mapped_column(
+        ForeignKey("hr_data.dim_type_absence.id")
+    )
+    date_absence_id: Mapped[int] = mapped_column(
+        ForeignKey("hr_data.dim_date.date_id"), primary_key=True
+    )
 
     employee: Mapped["DimEmployee"] = relationship(back_populates="absences")
     type_absence: Mapped["AbsenceType"] = relationship(back_populates="absences")
@@ -57,14 +62,21 @@ class DailyAttendance(Base):
     __tablename__ = "fact_daily_attendance"
     __table_args__ = {"schema": "hr_data"}
 
-    date_id: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_date.date_id"), primary_key=True)
-    id_employee: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_employee.id"), primary_key=True)
+    date_id: Mapped[int] = mapped_column(
+        ForeignKey("hr_data.dim_date.date_id"), primary_key=True
+    )
+    id_employee: Mapped[int] = mapped_column(
+        ForeignKey("hr_data.dim_employee.id"), primary_key=True
+    )
     present: Mapped[bool]
     check_in_hour: Mapped[Optional[time]]
     check_out_hour: Mapped[Optional[time]]
 
     employee: Mapped["DimEmployee"] = relationship(back_populates="daily_attendance")
-    date_table: Mapped["DateDimension"] = relationship(back_populates="daily_attendances")
+    date_table: Mapped["DateDimension"] = relationship(
+        back_populates="daily_attendances"
+    )
+
 
 class DateDimension(Base):
     __tablename__ = "dim_date"
@@ -95,8 +107,10 @@ class DateDimension(Base):
     jour_semaine: Mapped[int]
     est_ferie: Mapped[bool]
 
-    daily_attendances: Mapped[List["DailyAttendance"]] = relationship(back_populates="date_table")
-    
+    daily_attendances: Mapped[List["DailyAttendance"]] = relationship(
+        back_populates="date_table"
+    )
+
     # Validations (in-code)
     @validates("trimestre")
     def validate_quarter(self, key, trimestre_value):
@@ -127,28 +141,28 @@ class DateDimension(Base):
         if nom_jour_value.lower() not in DAY_NAMES:
             raise ValueError(f"Invalid day name: {nom_jour_value}")
         return nom_jour_value.lower()
-    
+
     @validates("jour_semaine")
     def validate_day_number(self, key, jour_semaine_value):
         if jour_semaine_value < 1 or jour_semaine_value > 7:
             raise ValueError(f"Invalid day number value: {jour_semaine_value}")
         return jour_semaine_value
-    
+
     def __repr__(self):
         return (
-        f"<DateDimension("
-        f"date_id={self.date_id}, "
-        f"date_literale={self.date_literale}, "
-        f"annee={self.annee}, "
-        f"trimestre={self.trimestre}, "
-        f"mois={self.mois}, "
-        f"nom_mois='{self.nom_mois}', "
-        f"jour={self.jour}, "
-        f"nom_jour='{self.nom_jour}', "
-        f"jour_semaine={self.jour_semaine}, "
-        f"est_ferie={self.est_ferie}"
-        f")>"
-    )
+            f"<DateDimension("
+            f"date_id={self.date_id}, "
+            f"date_literale={self.date_literale}, "
+            f"annee={self.annee}, "
+            f"trimestre={self.trimestre}, "
+            f"mois={self.mois}, "
+            f"nom_mois='{self.nom_mois}', "
+            f"jour={self.jour}, "
+            f"nom_jour='{self.nom_jour}', "
+            f"jour_semaine={self.jour_semaine}, "
+            f"est_ferie={self.est_ferie}"
+            f")>"
+        )
 
 
 # Employee dimension table
@@ -161,7 +175,9 @@ class DimEmployee(Base):
     last_name: Mapped[str]
     integration_date: Mapped[date]
     departure_date: Mapped[Optional[date]]
-    hierarchical_manager_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hr_data.dim_employee.id"), nullable=True)
+    hierarchical_manager_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hr_data.dim_employee.id"), nullable=True
+    )
     job_id: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_job.id"))
     service_id: Mapped[int] = mapped_column(ForeignKey("hr_data.dim_service.id"))
     address: Mapped[str]
@@ -175,6 +191,7 @@ class DimEmployee(Base):
     daily_attendance: Mapped[list["DailyAttendance"]] = relationship(
         back_populates="employee"
     )
+
 
 # Service dimension table
 class DimService(Base):
@@ -194,6 +211,7 @@ class DimJob(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
     description: Mapped[str | None]
+
 
 # REPORTING DATA MODELS
 @dataclass(frozen=True)
