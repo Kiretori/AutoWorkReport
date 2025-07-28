@@ -8,7 +8,7 @@ from database.models import DimEmployee, DailyAttendance, DailyReportData, Email
 from email_service.email_sender import send_daily_email
 from prefect import task, flow
 
-@flow
+@flow(flow_run_name="daily-report-{target_date_id}")
 def extract_data(target_date_id: int):
     load_dotenv()
     DB_URL = os.getenv("DATABASE_URL_LOCAL")
@@ -28,6 +28,7 @@ def extract_data(target_date_id: int):
 
     absence_percentage = (len(employees_absent) / employee_count) * 100
 
+    # To get work duration in a more readable string format
     def format_timedelta(td: timedelta) -> str:
         total_seconds = int(td.total_seconds())
         hours = total_seconds // 3600
@@ -72,7 +73,7 @@ def generate_report_html(daily_data: DailyReportData) -> str:
         else "aucun"
     )
 
-    # --- Prepare HTML for employees under 8.5 hours ---
+    # Prepare HTML for employees under 8.5 hours 
     under_8_30h_list_html = ""
     if daily_data.employees_under_8_30h:
         under_8_30h_list_items = [
@@ -84,7 +85,7 @@ def generate_report_html(daily_data: DailyReportData) -> str:
             "<p>Aucun employé n'a travaillé moins de 8.5 heures.</p>"
         )
 
-    # --- Prepare HTML for employees under 8 hours ---
+    # Prepare HTML for employees under 8 hours 
     under_8h_list_html = ""
     if daily_data.employees_under_8h:
         under_8h_list_items = [
@@ -93,11 +94,6 @@ def generate_report_html(daily_data: DailyReportData) -> str:
         under_8h_list_html = f"<ul>{''.join(under_8h_list_items)}</ul>"
     else:
         under_8h_list_html = "<p>Aucun employé n'a travaillé moins de 8 heures.</p>"
-
-
-    
-
-
 
     html_report = f"""
         <!DOCTYPE html>
@@ -199,7 +195,7 @@ def generate_report_html(daily_data: DailyReportData) -> str:
 
     return html_report
 
-
+@task(retries=3, timeout_seconds=10)
 def fetch_employees_under_working(
     session: Session, target_date_id: int, under_work_threshhold: float
 ) -> List[Dict[str, object]]:
@@ -222,7 +218,7 @@ def fetch_employees_under_working(
         {"employee": row[0], "work_hours": row[1]} for row in employees_under_working
     ]
 
-
+@task(retries=3, timeout_seconds=10)
 def fetch_absent_employees(session: Session, target_date_id: int) -> Sequence[DimEmployee]:
     stmt = (
         select(DimEmployee)
@@ -235,7 +231,7 @@ def fetch_absent_employees(session: Session, target_date_id: int) -> Sequence[Di
 
     return employees_absent
 
-
+@task(retries=3, timeout_seconds=10)
 def total_employee_count(session: Session) -> int:
     stmt = select(func.count()).select_from(DimEmployee)
     employee_count = session.execute(stmt).scalar_one()
