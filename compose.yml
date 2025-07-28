@@ -100,6 +100,7 @@ services:
       DATABASE_URL_LOCAL: postgresql://postgres:postgres@hr-db:5432/hrdatabase
       GMAIL_USER: touyar.wassim2003@gmail.com
       GMAIL_APP_PASS: fhoodhtnwlhnnclz 
+    restart: always
     networks:
       - default
 
