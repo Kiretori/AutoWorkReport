@@ -1,17 +1,19 @@
+from datetime import timedelta
 from prefect import task
-from database.models import DailyReportData
+from sqlalchemy import Row
+from database.models import DailyReportData, DimEmployee
 import csv
 import os 
-from typing import Tuple
+from typing import Any, Sequence, Tuple
 
 @task
-def generate_report_html(daily_data: DailyReportData) -> Tuple[str, str]:
+def generate_report_html(daily_data: DailyReportData) -> str:
     date_str = str(daily_data.date)
-    formatted_date = f"{date_str[6:]}/{date_str[4:6]}/{date_str[:4]}"
+    formatted_date = f"{date_str[6:]}/{date_str[4:6]}/{date_str[:4]}"  # Format date as DD/MM/YYYY
 
     # Prepare the absent employees string
     absent_employees_str = (
-        ", ".join(daily_data.employees_absent)
+        ", ".join([f"{e.last_name} {e.first_name}" for e in daily_data.employees_absent])
         if daily_data.employees_absent
         else "aucun"
     )
@@ -124,12 +126,12 @@ def generate_report_html(daily_data: DailyReportData) -> Tuple[str, str]:
 
             <details>
                 <summary>Employés ayant travaillé moins de 8.5 heures</summary>
-                {'<ul class="scrollable-list">' + "".join(f"<li>{e}</li>" for e in daily_data.employees_under_8_30h) + "</ul>" if daily_data.employees_under_8_30h else "<p>Aucun employé n'a travaillé moins de 8.5 heures.</p>"}
+                {'<ul class="scrollable-list">' + "".join(f"<li>{e[0].last_name} {e[0].first_name}: {e[1]}</li>" for e in daily_data.employees_under_8_30h) + "</ul>" if daily_data.employees_under_8_30h else "<p>Aucun employé n'a travaillé moins de 8.5 heures.</p>"}
             </details>
 
             <details>
                 <summary>Employés ayant travaillé moins de 8 heures</summary>
-                {'<ul class="scrollable-list">' + "".join(f"<li>{e}</li>" for e in daily_data.employees_under_8h) + "</ul>" if daily_data.employees_under_8h else "<p>Aucun employé n'a travaillé moins de 8 heures.</p>"}
+                {'<ul class="scrollable-list">' + "".join(f"<li>{e[0].last_name} {e[0].first_name}: {e[1]}</li>" for e in daily_data.employees_under_8h) + "</ul>" if daily_data.employees_under_8h else "<p>Aucun employé n'a travaillé moins de 8 heures.</p>"}
             </details>
 
             <div class="footer">
@@ -139,36 +141,36 @@ def generate_report_html(daily_data: DailyReportData) -> Tuple[str, str]:
     </body>
     </html>
     """
-    file_path = generate_csv_from_report(daily_data)
-    return html_report, file_path
+
+    return html_report
 
 
-def generate_csv_from_report(daily_data, filename: str = "daily_report.csv"):
+
+def generate_csv_from_employees(daily_data: Sequence[Row[Tuple[DimEmployee, Any, bool]]], filename: str):
+
+
+    def format_timedelta(td: timedelta) -> str:
+        total_minutes = td.total_seconds() // 60
+        hours = int(total_minutes // 60)
+        minutes = int(total_minutes % 60)
+        return f"{hours}h {minutes}m"
+
+
     os.makedirs("data", exist_ok=True)
     with open(f"data/{filename}", mode='w', newline='', encoding='utf-8-sig') as file:
         writer = csv.writer(file)
 
         # Header
-        writer.writerow(["Champ", "Valeur"])
+        writer.writerow(["nom", "prénom", "présent", "durée de travail"])
 
-        # Summary rows
-        writer.writerow(["Date", str(daily_data.date)])
-        writer.writerow(["Nombre d'absence", len(daily_data.employees_absent)])
-        writer.writerow(["Taux d'absence", f"{daily_data.absence_percentage:.2f}%"])
-        writer.writerow(["Employés absents", ", ".join(daily_data.employees_absent) or "aucun"])
-        writer.writerow(["Employés < 8.5h", len(daily_data.employees_under_8_30h)])
-        writer.writerow(["Employés < 8h", len(daily_data.employees_under_8h)])
+        for row in daily_data:
+            first_name = row[0].first_name
+            last_name = row[0].last_name
+            present = "OUI" if row[2] else "NON"
+            work_duration = format_timedelta(row[1]) if present == "OUI" else "0"
 
-        # Spacer
-        writer.writerow([])
+            writer.writerow([last_name, first_name, present, work_duration])
+       
 
-        # Detailed lists
-        writer.writerow(["Employés ayant travaillé moins de 8.5 heures"])
-        writer.writerows([[e] for e in daily_data.employees_under_8_30h or ["aucun"]])
-
-        writer.writerow([])
-
-        writer.writerow(["Employés ayant travaillé moins de 8 heures"])
-        writer.writerows([[e] for e in daily_data.employees_under_8h or ["aucun"]])
 
     return f"data/{filename}"
