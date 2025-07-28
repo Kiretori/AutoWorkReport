@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import date, time
-from sqlalchemy import Date, ForeignKey, CheckConstraint, String
+from sqlalchemy import Date, ForeignKey, CheckConstraint, String, Tuple
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from database.enums import ContractType
@@ -195,13 +195,13 @@ class DimJob(Base):
     name: Mapped[str]
     description: Mapped[str | None]
 
-
+# REPORTING DATA MODELS
 @dataclass(frozen=True)
 class DailyReportData:
     date: int
-    employees_under_8_30h: List[str]
-    employees_under_8h: List[str]
-    employees_absent: List[str]
+    employees_under_8_30h: List[Any]
+    employees_under_8h: List[Any]
+    employees_absent: List[DimEmployee]
     absence_percentage: float
 
 
@@ -210,3 +210,4 @@ class EmailData:
     receiver_emails: List[str]
     subject: str
     html_content: str
+    csv_file_path: str
