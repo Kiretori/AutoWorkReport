@@ -10,21 +10,23 @@ import os
 from prefect import task
 from prefect.logging import get_run_logger
 
+
 @task(retries=3, timeout_seconds=20)
 def send_daily_email(email_data: EmailData):
     load_dotenv()
     logger = get_run_logger()
 
-
     sender_email = os.getenv("GMAIL_USER")
     app_password = os.getenv("GMAIL_APP_PASS")
 
     if not sender_email or not app_password:
-        logger.error("Error: GMAIL_USER and GMAIL_APP_PASS environment variables are not set.")
+        logger.error(
+            "Error: GMAIL_USER and GMAIL_APP_PASS environment variables are not set."
+        )
         logger.error("Please set them before running the script for security reasons.")
         exit()
 
-    # Email Content 
+    # Email Content
     message = MIMEMultipart("alternative")
     message["From"] = sender_email
     message["To"] = ", ".join(email_data.receiver_emails)
@@ -50,7 +52,6 @@ def send_daily_email(email_data: EmailData):
         except Exception as e:
             logger.error(f"Failed to attach file '{email_data.csv_file_path}': {e}")
 
-
     # Convert message to string
     email_text = message.as_string()
 
@@ -61,13 +62,13 @@ def send_daily_email(email_data: EmailData):
     # Create a secure SSL context
     context = ssl.create_default_context()
 
-    # Send the Email 
-    logger.info(f"Attempting to send email from {sender_email} to {email_data.receiver_emails}...")
+    # Send the Email
+    logger.info(
+        f"Attempting to send email from {sender_email} to {email_data.receiver_emails}..."
+    )
     try:
         with smtplib.SMTP(smtp_server, port) as server:
-            server.starttls(
-                context=context
-            )  # Use secure TLS connection
+            server.starttls(context=context)  # Use secure TLS connection
             server.login(sender_email, app_password)
             server.sendmail(sender_email, email_data.receiver_emails, email_text)
         logger.info("Email sent successfully!")
