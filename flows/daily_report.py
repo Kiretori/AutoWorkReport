@@ -14,11 +14,29 @@ from tasks.queries import (
     fetch_employees_under_working,
     total_employee_count,
 )
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from database.db import get_engine
+from database.models import DateDimension
 
 
 @flow(flow_run_name="daily-report-{target_date_id}")
 def daily_report(target_date_id: int):
     logger = get_run_logger()
+
+    engine = get_engine()
+
+    # Check for holiday
+    with Session(engine) as session:
+        is_holiday = session.execute(
+            select(DateDimension.est_ferie).where(
+                DateDimension.date_id == target_date_id
+            )
+        ).scalar_one()
+
+    if is_holiday:
+        logger.info("Today is a holiday. No email will be sent")
+        exit(0)
 
     employees_daily_data = fetch_employees_per_date(target_date_id)
 
