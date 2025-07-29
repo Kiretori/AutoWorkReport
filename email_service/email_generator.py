@@ -150,6 +150,7 @@ def generate_report_html(daily_data: DailyReportData) -> str:
     return html_report
 
 
+@task
 def generate_csv_from_employees(
     daily_data: Sequence[Row[Tuple[DimEmployee, Any, bool]]], filename: str
 ):
@@ -160,17 +161,19 @@ def generate_csv_from_employees(
         return f"{hours}h {minutes}m"
 
     os.makedirs("data", exist_ok=True)
-    with open(f"data/{filename}", mode="w", newline="", encoding="utf-8-sig") as file:
+    with open(
+        f"data/{filename}.csv", mode="w", newline="", encoding="utf-8-sig"
+    ) as file:
         writer = csv.writer(file)
 
         # Header
         writer.writerow(["nom", "prénom", "présent", "durée de travail"])
 
-        for row in daily_data:
-            first_name = row[0].first_name
-            last_name = row[0].last_name
-            present = "OUI" if row[2] else "NON"
-            work_duration = format_timedelta(row[1]) if present == "OUI" else "0"
+        for emp, daily, dur in daily_data:
+            first_name = emp.first_name
+            last_name = emp.last_name
+            present = "OUI" if daily.present else "NON"
+            work_duration = format_timedelta(dur) if present == "OUI" else "0"
 
             writer.writerow([last_name, first_name, present, work_duration])
 
