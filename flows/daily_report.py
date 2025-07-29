@@ -29,7 +29,7 @@ def daily_report(target_date_id: int):
         exit(1)
 
     csv_filepath = generate_csv_from_employees(
-        employees_daily_data, f"daily_report{target_date_id}"
+        employees_daily_data, f"daily_report{target_date_id}.csv"
     )
     employees_under_8_30h = fetch_employees_under_working(employees_daily_data, 8.5)
     employees_under_8h = fetch_employees_under_working(employees_daily_data, 8)
