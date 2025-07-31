@@ -1,14 +1,12 @@
-from datetime import timedelta
+from datetime import date
+from typing import Any, Sequence, Tuple
 from prefect import task
 from sqlalchemy import Row
-from database.models import DailyReportData, DimEmployee
-import csv
-import os
-from typing import Any, Sequence, Tuple
+from database.models import DailyReportData
 
 
 @task
-def generate_report_html(daily_data: DailyReportData) -> str:
+def generate_daily_report_html(daily_data: DailyReportData) -> str:
     date_str = str(daily_data.date)
     formatted_date = (
         f"{date_str[6:]}/{date_str[4:6]}/{date_str[:4]}"  # Format date as DD/MM/YYYY
@@ -151,29 +149,96 @@ def generate_report_html(daily_data: DailyReportData) -> str:
 
 
 @task
-def generate_csv_from_employees(
-    daily_data: Sequence[Row[Tuple[DimEmployee, Any, bool]]], filename: str
-):
-    def format_timedelta(td: timedelta) -> str:
-        total_minutes = td.total_seconds() // 60
-        hours = int(total_minutes // 60)
-        minutes = int(total_minutes % 60)
-        return f"{hours}h {minutes}m"
+def generate_weekly_report_html(
+    weekly_data: Sequence[Row[Tuple[date, str, bool, int, int, Any]]],
+    start_date: date,
+    end_date: date,
+) -> str:
+    table_rows = ""
+    for date_literal, day_name, is_holiday, abs_count, _, abs_percentage in weekly_data:
+        table_rows += f"""
+        <tr>
+            <td>{date_literal}</td>
+            <td>{day_name}</td>
+            <td>{"OUI" if is_holiday else "NON"}</td>
+            <td>{abs_count}</td>
+            <td>{abs_percentage}%</td>
+        </tr>
+        """
 
-    os.makedirs("data", exist_ok=True)
-    with open(f"data/{filename}", mode="w", newline="", encoding="utf-8-sig") as file:
-        writer = csv.writer(file)
-
-        # Header
-        writer.writerow(["Matricule", "Nom", "Prénom", "Présent", "Durée de travail"])
-
-        for emp, daily, dur in daily_data:
-            matricule = emp.matricule
-            first_name = emp.first_name
-            last_name = emp.last_name
-            present = "OUI" if daily.present else "NON"
-            work_duration = format_timedelta(dur) if present == "OUI" else "0"
-
-            writer.writerow([matricule, last_name, first_name, present, work_duration])
-
-    return f"data/{filename}"
+    html_report = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Rapport de la semaine du {start_date}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f9fafb;
+                padding: 30px;
+                margin: 0;
+                color: #1f2937;
+            }}
+            .container {{
+                max-width: 800px;
+                margin: auto;
+                background-color: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+                padding: 30px;
+            }}
+            h2 {{
+                text-align: center;
+                color: #111827;
+                margin-bottom: 30px;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }}
+            th, td {{
+                padding: 12px 15px;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 14px;
+                text-align: left;
+                color: #1f2937;
+            }}
+            th {{
+                background-color: #f3f4f6;
+                font-weight: 600;
+            }}
+            .footer {{
+                text-align: center;
+                font-size: 12px;
+                color: #6b7280;
+                margin-top: 40px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Rapport hebdomadaire des absences</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Jour</th>
+                        <th>Férié</th>
+                        <th>Nombre d'absences</th>
+                        <th>Pourcentage d'absence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+            <div class="footer">
+                Généré automatiquement par le système WorkReport
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_report
