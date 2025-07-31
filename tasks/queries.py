@@ -110,6 +110,7 @@ def fetch_employee_weekly_data(
     return employees
 
 
+# todo: remove later
 def test_weekly():
     start_date, end_date = date(2025, 7, 7), date(2025, 7, 11)
     return fetch_employee_weekly_data(start_date, end_date)
