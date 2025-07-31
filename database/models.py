@@ -213,10 +213,20 @@ class DimJob(Base):
     description: Mapped[str | None]
 
 
-# REPORTING DATA MODELS
+# ---------------------------------- REPORTING DATA MODELS ---------------------------------#
 @dataclass(frozen=True)
 class DailyReportData:
     date: int
+    employees_under_8_30h: List[Any]
+    employees_under_8h: List[Any]
+    employees_absent: List[DimEmployee]
+    absence_percentage: float
+
+
+@dataclass(frozen=True)
+class WeeklyReportData:
+    start_date: date
+    end_date: date
     employees_under_8_30h: List[Any]
     employees_under_8h: List[Any]
     employees_absent: List[DimEmployee]

@@ -1,18 +1,15 @@
-import os
 from datetime import timedelta
 from database.models import DailyReportData, EmailData
 from email_service.email_sender import send_daily_email
-from email_service.email_generator import (
-    generate_report_html,
-    generate_csv_from_employees,
-)
+from email_service.email_generator import generate_daily_report_html
 from prefect import flow
 from prefect.logging import get_run_logger
-from tasks.queries import (
+from tasks.utils import (
     fetch_employees_per_date,
     fetch_absent_employees,
     fetch_employees_under_working,
     total_employee_count,
+    generate_daily_csv,
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -46,7 +43,7 @@ def daily_report(target_date_id: int):
         logger.error("Couldn't fetch employee data")
         exit(1)
 
-    csv_filepath = generate_csv_from_employees(
+    csv_filepath = generate_daily_csv(
         employees_daily_data, f"daily_report{target_date_id}.csv"
     )
     employees_under_8_30h = fetch_employees_under_working(employees_daily_data, 8.5)
@@ -70,7 +67,7 @@ def daily_report(target_date_id: int):
         absence_percentage=absence_percentage,
     )
 
-    html_report = generate_report_html(daily_data)
+    html_report = generate_daily_report_html(daily_data)
 
     email_data = EmailData(
         receiver_emails=["kiretori2003@gmail.com"],
@@ -80,9 +77,6 @@ def daily_report(target_date_id: int):
     )
 
     send_daily_email(email_data)
-    os.remove(csv_filepath)
-
-    # TODO: finish making of reports
 
 
 def serve_daily_report_flow():
