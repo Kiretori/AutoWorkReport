@@ -10,7 +10,6 @@ wheels/
 .venv
 todo.txt
 
-
 .env
 .env.docker
 
