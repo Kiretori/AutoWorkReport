@@ -1,6 +1,6 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence, Tuple
 from datetime import date, time
-from sqlalchemy import Date, ForeignKey, CheckConstraint, String
+from sqlalchemy import Date, ForeignKey, CheckConstraint, Row, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from database.enums import ContractType
@@ -238,4 +238,10 @@ class EmailData:
     receiver_emails: List[str]
     subject: str
     html_content: str
-    csv_file_path: str
+    report_file_path: str
+
+
+@dataclass(frozen=True)
+class ServiceAbsenceTable:
+    service_name: str
+    table: Sequence[Row[Tuple[date, str, bool, int, int, Any]]]

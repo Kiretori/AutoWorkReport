@@ -1,5 +1,6 @@
 from datetime import timedelta
-from database.models import DailyReportData, EmailData
+from database.models import DailyReportData, EmailData, DateDimension
+from database.db import get_engine
 from email_service.email_sender import send_daily_email
 from email_service.email_generator import generate_daily_report_html
 from prefect import flow
@@ -13,8 +14,6 @@ from tasks.utils import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from database.db import get_engine
-from database.models import DateDimension
 
 
 @flow(flow_run_name="daily-report-{target_date_id}")
@@ -44,7 +43,7 @@ def daily_report(target_date_id: int):
         exit(1)
 
     csv_filepath = generate_daily_csv(
-        employees_daily_data, f"daily_report{target_date_id}.csv"
+        employees_daily_data, f"daily_report{target_date_id}"
     )
     employees_under_8_30h = fetch_employees_under_working(employees_daily_data, 8.5)
     employees_under_8h = fetch_employees_under_working(employees_daily_data, 8)
@@ -73,7 +72,7 @@ def daily_report(target_date_id: int):
         receiver_emails=["kiretori2003@gmail.com"],
         subject="Rapport Quotidien",
         html_content=html_report,
-        csv_file_path=csv_filepath,
+        report_file_path=f"{csv_filepath}",
     )
 
     send_daily_email(email_data)

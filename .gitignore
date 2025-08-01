@@ -13,3 +13,6 @@ todo.txt
 
 .env
 .env.docker
+
+temp/
+data/

@@ -4,10 +4,16 @@ import os
 from typing import Any, List, Tuple, Sequence
 from sqlalchemy import Integer, Row, select, func
 from sqlalchemy.orm import Session, joinedload
-from database.models import DateDimension, DimEmployee, DailyAttendance
+from database.models import (
+    DateDimension,
+    DimEmployee,
+    DailyAttendance,
+    DimService,
+)
 from prefect import task
 from prefect.logging import get_run_logger, disable_run_logger
 from database.db import get_engine
+import xlsxwriter
 
 
 @task
@@ -21,17 +27,18 @@ def fetch_employees_per_date(
         logger.error(f"Error while connecting to the database: {e}")
         exit(1)
 
-    with Session(engine) as session:
-        work_duration = DailyAttendance.check_out_hour - DailyAttendance.check_in_hour
+    work_duration = DailyAttendance.check_out_hour - DailyAttendance.check_in_hour
 
-        stmt = (
-            select(DimEmployee, DailyAttendance, work_duration)
-            .join(DailyAttendance, DimEmployee.id == DailyAttendance.id_employee)
-            .join(DateDimension, DailyAttendance.date_id == DateDimension.date_id)
-            .where(~DateDimension.est_ferie)  # Not holiday
-            .where(DateDimension.date_id == target_date_id)
-            .options(joinedload(DailyAttendance.date_table))
-        )
+    stmt = (
+        select(DimEmployee, DailyAttendance, work_duration)
+        .join(DailyAttendance, DimEmployee.id == DailyAttendance.id_employee)
+        .join(DateDimension, DailyAttendance.date_id == DateDimension.date_id)
+        .where(~DateDimension.est_ferie)  # Not holiday
+        .where(DateDimension.date_id == target_date_id)
+        .options(joinedload(DailyAttendance.date_table))
+    )
+
+    with Session(engine) as session:
         employees = session.execute(stmt).all()
 
     return employees
@@ -72,8 +79,9 @@ def total_employee_count() -> int:
         exit(1)
 
     with Session(engine) as session:
-        stmt = select(func.count()).select_from(DimEmployee)
-        employee_count = session.execute(stmt).scalar_one()
+        employee_count = session.execute(
+            select(func.count()).select_from(DimEmployee)
+        ).scalar_one()
 
     return employee_count
 
@@ -99,36 +107,40 @@ def fetch_weekly_data(
         logger.error(f"Error while connecting to the database: {e}")
         exit(1)
 
-    with Session(engine) as session:
-        stmt = (
-            select(
-                DateDimension.date_literale,
-                DateDimension.nom_jour,
-                DateDimension.est_ferie,
-                func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
-                func.count(DimEmployee.id).label("employee_count"),
-                (
-                    func.round(
-                        func.sum((~DailyAttendance.present).cast(Integer))
-                        * 100.0
-                        / func.count(DimEmployee.id),
-                        2,
-                    )
-                ).label("absence_percentage"),
-            )
-            .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
-            .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
-            .where(DateDimension.date_literale.between(start_date, end_date))
-            .group_by(
-                DateDimension.date_literale,
-                DateDimension.nom_jour,
-                DateDimension.est_ferie,
-            )
-            .order_by(DateDimension.date_literale.asc())
+    stmt = (
+        select(
+            DateDimension.date_literale,
+            DateDimension.nom_jour,
+            DateDimension.est_ferie,
+            func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+            func.count(DimEmployee.id).label("employee_count"),
+            (
+                func.round(
+                    func.sum((~DailyAttendance.present).cast(Integer))
+                    * 100.0
+                    / func.count(DimEmployee.id),
+                    2,
+                )
+            ).label("absence_percentage"),
         )
+        .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+        .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+        .where(DateDimension.date_literale.between(start_date, end_date))
+        .group_by(
+            DateDimension.date_literale,
+            DateDimension.nom_jour,
+            DateDimension.est_ferie,
+        )
+        .order_by(DateDimension.date_literale.asc())
+    )
+
+    with Session(engine) as session:
         employees = session.execute(stmt).all()
 
     return employees
+
+
+# *--------------------------------- CSV / EXCEL generation -------------------------------------*
 
 
 @task
@@ -143,7 +155,7 @@ def generate_daily_csv(
 
     os.makedirs("data/daily_reports/", exist_ok=True)
     with open(
-        f"data/daily_reports/{filename}", mode="w", newline="", encoding="utf-8-sig"
+        f"data/daily_reports/{filename}.csv", mode="w", newline="", encoding="utf-8-sig"
     ) as file:
         writer = csv.writer(file)
 
@@ -159,22 +171,19 @@ def generate_daily_csv(
 
             writer.writerow([matricule, last_name, first_name, present, work_duration])
 
-    return f"data/daily_reports/{filename}"
+    return f"data/daily_reports/{filename}.csv"
 
 
 @task
 def generate_weekly_csv(
     weekly_data: Sequence[Row[Tuple[date, str, bool, int, int, Any]]], filename: str
 ):
-    def format_timedelta(td: timedelta) -> str:
-        total_minutes = td.total_seconds() // 60
-        hours = int(total_minutes // 60)
-        minutes = int(total_minutes % 60)
-        return f"{hours}h {minutes}m"
-
     os.makedirs("data/weekly_reports/", exist_ok=True)
     with open(
-        f"data/weekly_reports/{filename}", mode="w", newline="", encoding="utf-8-sig"
+        f"data/weekly_reports/{filename}.csv",
+        mode="w",
+        newline="",
+        encoding="utf-8-sig",
     ) as file:
         writer = csv.writer(file)
 
@@ -200,16 +209,92 @@ def generate_weekly_csv(
 
             writer.writerow([date_literal, day_name, ferie, abs_count, abs_percentage])
 
-    return f"data/weekly_reports/{filename}"
+    return f"data/weekly_reports/{filename}.csv"
 
 
-# todo: remove later
-def test_weekly():
-    start_date, end_date = date(2025, 7, 7), date(2025, 7, 11)
-    return fetch_weekly_data(start_date, end_date)
+@task
+def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> str:
+    logger = get_run_logger()
+
+    os.makedirs("data/weekly_reports/", exist_ok=True)
+    workbook = xlsxwriter.Workbook(f"data/weekly_reports/{filename}.xlsx")
+    date_format = workbook.add_format({"num_format": "yyyy-mm-dd"})
+
+    engine = get_engine()
+    logger.info("Fetching data from database")
+    with Session(engine) as session:
+        services = session.execute(select(DimService.id, DimService.name)).all()
+        for service in services:
+            stmt = (
+                select(
+                    DateDimension.date_literale,
+                    DateDimension.nom_jour,
+                    DateDimension.est_ferie,
+                    func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+                    func.count(DimEmployee.id).label("employee_count"),
+                    (
+                        func.round(
+                            func.sum((~DailyAttendance.present).cast(Integer))
+                            * 100.0
+                            / func.count(DimEmployee.id),
+                            2,
+                        )
+                    ).label("absence_percentage"),
+                )
+                .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+                .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+                .join(DimService, DimService.id == DimEmployee.service_id)
+                .where(DateDimension.date_literale.between(start_date, end_date))
+                .where(DimService.id == service.id)
+                .group_by(
+                    DateDimension.date_literale,
+                    DateDimension.nom_jour,
+                    DateDimension.est_ferie,
+                )
+                .order_by(DateDimension.date_literale.asc())
+            )
+
+            table = session.execute(stmt).all()
+
+            cleaned_name = "".join(
+                [c for c in service.name if c not in ["'", "/", '"', "@"]]
+            )
+
+            worksheet_name = cleaned_name[:31]
+            worksheet = workbook.add_worksheet(name=worksheet_name)
+            worksheet.set_column(0, 0, 12)  # Date column
+            worksheet.set_column(1, 1, 10)  # Day name
+            worksheet.set_column(2, 2, 8)  # Férié
+            worksheet.set_column(3, 3, 14)  # Absences
+            worksheet.set_column(4, 4, 25)  # Total employees
+            worksheet.set_column(5, 5, 15)  # Other columns
+            headers = [
+                "Date",
+                "Jour",
+                "Férié",
+                "Nombre d'absences",
+                "Nombre total d'employés",
+                "Absence %",
+            ]
+
+            for col, header in enumerate(headers):
+                worksheet.write(0, col, header)
+
+            for row_idx, row in enumerate(table, start=1):
+                for col_idx, value in enumerate(row):
+                    if col_idx == 0 and isinstance(value, date):  # Date column
+                        worksheet.write_datetime(row_idx, col_idx, value, date_format)
+                    elif col_idx == 2:  # Férié column
+                        worksheet.write(row_idx, col_idx, "OUI" if value else "NON")
+                    else:
+                        worksheet.write(row_idx, col_idx, value)
+
+    workbook.close()
+    return f"data/weekly_reports/{filename}.xlsx"
 
 
 if __name__ == "__main__":
     with disable_run_logger():
-        employees = test_weekly()
-        generate_weekly_csv.fn(employees, "weekly_test.csv")
+        service_tables = generate_weekly_excel.fn(
+            date(2025, 7, 7), date(2025, 7, 11), "test"
+        )
