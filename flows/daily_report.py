@@ -14,13 +14,32 @@ from tasks.utils import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from datetime import date
 
 
-@flow(flow_run_name="daily-report-{target_date_id}")
-def daily_report(target_date_id: int):
+def generate_daily_flow_name() -> str:
+    date_id = int(date.today().strftime("%Y%m%d"))
+    return f"daily_report-{date_id}"
+
+
+@flow(flow_run_name=generate_daily_flow_name)
+def daily_report(target_date_id: int | None = None):
     logger = get_run_logger()
 
     engine = get_engine()
+
+    if target_date_id is None:
+        today = date.today()
+        with Session(engine) as session:
+            target_date_id = session.execute(
+                select(DateDimension.date_id).where(
+                    DateDimension.date_literale == today
+                )
+            ).scalar_one_or_none()
+
+        if target_date_id is None:
+            logger.error(f"No date_id found for today's date: {today}")
+            return
 
     # Check for holiday
     with Session(engine) as session:
