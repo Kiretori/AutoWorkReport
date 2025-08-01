@@ -34,14 +34,14 @@ def send_daily_email(email_data: EmailData):
 
     # Attach html to the message
     message.attach(MIMEText(email_data.html_content, "html"))
-    if email_data.csv_file_path:
+    if email_data.report_file_path:
         try:
-            with open(email_data.csv_file_path, "rb") as attachment:
+            with open(email_data.report_file_path, "rb") as attachment:
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(attachment.read())
             encoders.encode_base64(part)
 
-            filename = os.path.basename(email_data.csv_file_path)
+            filename = os.path.basename(email_data.report_file_path)
             part.add_header(
                 "Content-Disposition",
                 f"attachment; filename={filename}",
@@ -50,7 +50,7 @@ def send_daily_email(email_data: EmailData):
             message.attach(part)
             logger.info(f"Attached file: {filename}")
         except Exception as e:
-            logger.error(f"Failed to attach file '{email_data.csv_file_path}': {e}")
+            logger.error(f"Failed to attach file '{email_data.report_file_path}': {e}")
 
     # Convert message to string
     email_text = message.as_string()
