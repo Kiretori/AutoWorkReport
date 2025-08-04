@@ -43,4 +43,4 @@ def weekly_report():
 
 
 def serve_weekly_report_flow():
-    weekly_report.serve(name="weekly-report", cron="0 20 * * 5")
+    weekly_report.serve(name="weekly-report", cron="0 20 * * 6")

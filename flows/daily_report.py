@@ -25,6 +25,10 @@ def generate_daily_flow_name() -> str:
 def daily_report(target_date_id: int | None = None):
     logger = get_run_logger()
 
+    if date.today().weekday() in {5, 6}:  # Skip weekends
+        logger.info("Nothing to report on a weekend.")
+        return
+
     engine = get_engine()
 
     if target_date_id is None:
