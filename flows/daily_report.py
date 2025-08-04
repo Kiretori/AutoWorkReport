@@ -1,4 +1,3 @@
-from datetime import timedelta
 from database.models import DailyReportData, EmailData, DateDimension
 from database.db import get_engine
 from email_service.email_sender import send_daily_email
@@ -69,13 +68,6 @@ def daily_report(target_date_id: int | None = None):
     employees_absent = fetch_absent_employees(employees_daily_data)
 
     absence_percentage = (len(employees_absent) / employee_count) * 100
-
-    # To get work duration in a more readable string format
-    def format_timedelta(td: timedelta) -> str:
-        total_seconds = int(td.total_seconds())
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        return f"{hours} heures, {minutes} minutes"
 
     daily_data = DailyReportData(
         date=target_date_id,

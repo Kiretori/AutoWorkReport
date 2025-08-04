@@ -61,6 +61,7 @@ def send_daily_email(email_data: EmailData):
 
     # Create a secure SSL context
     context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
 
     # Send the Email
     logger.info(
