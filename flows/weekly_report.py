@@ -29,7 +29,11 @@ def weekly_report():
     start_date, end_date = get_last_workweek()
     weekly_data = fetch_weekly_data(start_date, end_date)
     logger.info("Generating excel sheets")
-    xlsx_filepath = generate_weekly_excel(start_date, end_date, "weekly_report")
+    xlsx_filepath = generate_weekly_excel(
+        start_date,
+        end_date,
+        f"weekly_report_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}",
+    )
     html_report = generate_weekly_report_html(weekly_data, start_date, end_date)
 
     email_data = EmailData(
