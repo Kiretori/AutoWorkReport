@@ -86,13 +86,6 @@ def total_employee_count() -> int:
     return employee_count
 
 
-def get_last_workweek() -> Tuple[date, date]:
-    today = date.today()
-    last_monday = today - timedelta(days=today.weekday() + 7)
-    last_friday = last_monday + timedelta(days=4)
-    return last_monday, last_friday
-
-
 def fetch_weekly_data(
     start_date: date, end_date: date
 ) -> Sequence[Row[Tuple[date, str, bool, int, int, Any]]]:
