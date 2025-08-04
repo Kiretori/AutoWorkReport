@@ -44,7 +44,3 @@ def weekly_report():
     )
 
     send_daily_email(email_data)
-
-
-def serve_weekly_report_flow():
-    weekly_report.serve(name="weekly-report", cron="0 20 * * 6")

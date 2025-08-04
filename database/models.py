@@ -238,7 +238,7 @@ class EmailData:
     receiver_emails: List[str]
     subject: str
     html_content: str
-    report_file_path: str
+    report_file_path: str | None
 
 
 @dataclass(frozen=True)

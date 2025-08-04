@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any, Sequence, Tuple
 from prefect import task
 from sqlalchemy import Row
-from database.models import DailyReportData
+from database.models import DailyReportData, DateDimension
 
 
 @task
@@ -226,6 +226,100 @@ def generate_weekly_report_html(
                         <th>Date</th>
                         <th>Jour</th>
                         <th>Férié</th>
+                        <th>Nombre d'absences</th>
+                        <th>Pourcentage d'absence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+            <div class="footer">
+                Généré automatiquement par le système WorkReport
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_report
+
+
+@task
+def generate_monthly_report_html(
+    monthly_data: Sequence[Row[Tuple[DateDimension, int, Any]]],
+    month_name: str,
+    year: int,
+) -> str:
+    table_rows = ""
+    for dim_date, abs_count, abs_percentage in monthly_data:
+        table_rows += f"""
+        <tr>
+            <td>{dim_date.date_literale}</td>
+            <td>{dim_date.nom_jour}</td>
+            <td>{abs_count}</td>
+            <td>{abs_percentage}%</td>
+        </tr>
+        """
+
+    html_report = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Rapport de la semaine du {month_name} - {year}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f9fafb;
+                padding: 30px;
+                margin: 0;
+                color: #1f2937;
+            }}
+            .container {{
+                max-width: 800px;
+                margin: auto;
+                background-color: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+                padding: 30px;
+            }}
+            h2 {{
+                text-align: center;
+                color: #111827;
+                margin-bottom: 30px;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }}
+            th, td {{
+                padding: 12px 15px;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 14px;
+                text-align: left;
+                color: #1f2937;
+            }}
+            th {{
+                background-color: #f3f4f6;
+                font-weight: 600;
+            }}
+            .footer {{
+                text-align: center;
+                font-size: 12px;
+                color: #6b7280;
+                margin-top: 40px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Rapport des absences - {month_name} {year}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Jour</th>
                         <th>Nombre d'absences</th>
                         <th>Pourcentage d'absence</th>
                     </tr>
