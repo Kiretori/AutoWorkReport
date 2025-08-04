@@ -261,6 +261,7 @@ def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> st
             worksheet.set_column(3, 3, 14)  # Absences
             worksheet.set_column(4, 4, 25)  # Total employees
             worksheet.set_column(5, 5, 15)  # Other columns
+
             headers = [
                 "Date",
                 "Jour",
@@ -270,10 +271,19 @@ def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> st
                 "Absence %",
             ]
 
-            for col, header in enumerate(headers):
-                worksheet.write(0, col, header)
+            # Add a title in the first row
+            title = f"Rapport hebdomadaire - {service.name}"
+            title_format = workbook.add_format(
+                {"align": "center", "bold": True, "font_size": 14}
+            )
+            worksheet.merge_range(0, 0, 0, len(headers) - 1, title, title_format)
 
-            for row_idx, row in enumerate(table, start=1):
+            # Write headers in the second row
+            for col, header in enumerate(headers):
+                worksheet.write(1, col, header)
+
+            # Write data starting from the third row
+            for row_idx, row in enumerate(table, start=2):
                 for col_idx, value in enumerate(row):
                     if col_idx == 0 and isinstance(value, date):  # Date column
                         worksheet.write_datetime(row_idx, col_idx, value, date_format)
