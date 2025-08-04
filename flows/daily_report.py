@@ -90,7 +90,3 @@ def daily_report(target_date_id: int | None = None):
     )
 
     send_daily_email(email_data)
-
-
-def serve_daily_report_flow():
-    daily_report.serve(name="daily-report", cron="0 20 * * *")

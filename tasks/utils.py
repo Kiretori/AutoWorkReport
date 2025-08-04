@@ -44,6 +44,7 @@ def fetch_employees_per_date(
     return employees
 
 
+@task
 def fetch_absent_employees(
     employees_data: Sequence[Row[Tuple[DimEmployee, DailyAttendance, Any]]],
 ) -> List[DimEmployee]:
@@ -56,6 +57,7 @@ def fetch_absent_employees(
     return absent_employees
 
 
+@task
 def fetch_employees_under_working(
     employees_data: Sequence[Row[Tuple[DimEmployee, DailyAttendance, Any]]],
     under_work_threshold: float,
@@ -86,6 +88,7 @@ def total_employee_count() -> int:
     return employee_count
 
 
+@task
 def fetch_weekly_data(
     start_date: date, end_date: date
 ) -> Sequence[Row[Tuple[date, str, bool, int, int, Any]]]:
@@ -131,6 +134,43 @@ def fetch_weekly_data(
         employees = session.execute(stmt).all()
 
     return employees
+
+
+@task
+def fetch_monthly_data(
+    target_month: int, target_year: int
+) -> Sequence[Row[Tuple[DateDimension, int, Any]]]:
+    logger = get_run_logger()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    stmt = (
+        select(
+            DateDimension,
+            func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+            (
+                func.round(
+                    func.sum((~DailyAttendance.present).cast(Integer))
+                    * 100.0
+                    / func.count(DimEmployee.id),
+                    2,
+                )
+            ).label("absence_percentage"),
+        )
+        .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+        .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+        .group_by(DateDimension.date_id)
+        .where(DateDimension.mois == target_month)
+        .where(DateDimension.annee == target_year)
+        .where(DateDimension.jour_semaine.not_in([6, 7]))
+        .order_by(DateDimension.date_id)
+    )
+
+    with Session(engine) as session:
+        return session.execute(stmt).all()
 
 
 # *--------------------------------- CSV / EXCEL generation -------------------------------------*
@@ -294,6 +334,94 @@ def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> st
 
     workbook.close()
     return f"data/weekly_reports/{filename}.xlsx"
+
+
+@task
+def generate_monthly_excel(target_month: int, target_year: int, filename: str) -> str:
+    logger = get_run_logger()
+
+    os.makedirs("data/monthly_reports/", exist_ok=True)
+    workbook = xlsxwriter.Workbook(f"data/monthly_reports/{filename}.xlsx")
+    date_format = workbook.add_format({"num_format": "yyyy-mm-dd"})
+
+    engine = get_engine()
+    logger.info("Fetching data from database")
+
+    with Session(engine) as session:
+        services = session.execute(select(DimService.id, DimService.name)).all()
+        for service in services:
+            stmt = (
+                select(
+                    DateDimension,
+                    func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+                    (
+                        func.round(
+                            func.sum((~DailyAttendance.present).cast(Integer))
+                            * 100.0
+                            / func.count(DimEmployee.id),
+                            2,
+                        )
+                    ).label("absence_percentage"),
+                )
+                .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+                .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+                .join(DimService, DimService.id == DimEmployee.service_id)
+                .group_by(DateDimension.date_id)
+                .where(DateDimension.mois == target_month)
+                .where(DateDimension.annee == target_year)
+                .where(DateDimension.jour_semaine.not_in([6, 7]))
+                .where(DimService.id == service.id)
+                .order_by(DateDimension.date_id)
+            )
+
+            table = session.execute(stmt).all()
+
+            cleaned_name = "".join(
+                [c for c in service.name if c not in ["'", "/", '"', "@"]]
+            )
+
+            worksheet_name = cleaned_name[:31]
+            worksheet = workbook.add_worksheet(name=worksheet_name)
+            worksheet.set_column(0, 0, 12)  # Date column
+            worksheet.set_column(1, 1, 10)  # Day name
+            worksheet.set_column(2, 2, 14)  # Absences
+            worksheet.set_column(3, 3, 14)  # Other columns
+
+            headers = [
+                "Date",
+                "Jour",
+                "Nombre d'absences",
+                "Absence %",
+            ]
+
+            # Add a title in the first row
+            title = f"Rapport mensuel - {service.name}"
+            title_format = workbook.add_format(
+                {"align": "center", "bold": True, "font_size": 14}
+            )
+            worksheet.merge_range(0, 0, 0, len(headers) - 1, title, title_format)
+
+            # Write headers in the second row
+            for col, header in enumerate(headers):
+                worksheet.write(1, col, header)
+
+            # Write data starting from the third row
+            for row_idx, row in enumerate(table, start=2):
+                date_dim = row[0]
+                absence = row[1]
+                absence_percentage = row[2]
+
+                # Write date and day name
+                worksheet.write_datetime(
+                    row_idx, 0, date_dim.date_literale, date_format
+                )
+                worksheet.write(row_idx, 1, date_dim.nom_jour)
+                # Write absence and absence percentage
+                worksheet.write(row_idx, 2, absence)
+                worksheet.write(row_idx, 3, absence_percentage)
+
+    workbook.close()
+    return f"data/monthly_reports/{filename}.xlsx"
 
 
 if __name__ == "__main__":
