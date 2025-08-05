@@ -173,6 +173,44 @@ def fetch_monthly_data(
         return session.execute(stmt).all()
 
 
+@task
+def fetch_quarterly_data(
+    target_quarter: int, target_year: int
+) -> Sequence[Row[Tuple[int, int, Any]]]:
+    logger = get_run_logger()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    stmt = (
+        select(
+            DateDimension.mois,
+            func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+            (
+                func.round(
+                    func.sum((~DailyAttendance.present).cast(Integer))
+                    * 100.0
+                    / func.count(DimEmployee.id),
+                    2,
+                )
+            ).label("absence_percentage"),
+        )
+        .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+        .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+        .group_by(DateDimension.mois)
+        .where(DateDimension.trimestre == target_quarter)
+        .where(DateDimension.annee == target_year)
+        .where(~DateDimension.est_ferie)
+        .where(DateDimension.jour_semaine.not_in([6, 7]))
+        .order_by(DateDimension.mois)
+    )
+
+    with Session(engine) as session:
+        return session.execute(stmt).all()
+
+
 # *--------------------------------- CSV / EXCEL generation -------------------------------------*
 
 
