@@ -6,7 +6,7 @@ from email_service.email_sender import send_daily_email
 from tasks.utils import fetch_monthly_data, generate_monthly_excel
 from database.models import EmailData
 from datetime import date
-
+from flows import RECEIVER_EMAILS
 
 months_map = {
     1: "Janvier",
@@ -45,7 +45,7 @@ def monthly_report(target_month: int | None = None, target_year: int | None = No
         target_year = _target_year
 
     monthly_data = fetch_monthly_data(target_month, target_year)
-    logger.info("Generating excel sheets")
+    logger.info("Generating Excel sheets")
     xlsx_filepath = generate_monthly_excel(
         target_month,
         target_year,
@@ -57,7 +57,7 @@ def monthly_report(target_month: int | None = None, target_year: int | None = No
     )
 
     email_data = EmailData(
-        receiver_emails=["kiretori2003@gmail.com"],
+        receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Mensuel",
         html_content=html_report,
         report_file_path=f"{xlsx_filepath}",

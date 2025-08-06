@@ -32,7 +32,7 @@ def quarterly_report(target_quarter: int | None, target_year: int | None):
         target_year = _target_year
 
     quarterly_data = fetch_quarterly_data(target_quarter, target_year)
-    logger.info("Generating excel sheets")
+    logger.info("Generating Excel sheets")
     xlsx_filepath = generate_quarterly_excel(
         target_quarter,
         target_year,
