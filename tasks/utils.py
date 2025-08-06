@@ -176,7 +176,7 @@ def fetch_monthly_data(
 @task
 def fetch_quarterly_data(
     target_quarter: int, target_year: int
-) -> Sequence[Row[Tuple[int, int, Any]]]:
+) -> Sequence[Row[Tuple[int, str, int, Any]]]:
     logger = get_run_logger()
     try:
         engine = get_engine()
@@ -187,6 +187,7 @@ def fetch_quarterly_data(
     stmt = (
         select(
             DateDimension.mois,
+            DateDimension.nom_mois,
             func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
             (
                 func.round(
@@ -199,7 +200,7 @@ def fetch_quarterly_data(
         )
         .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
         .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
-        .group_by(DateDimension.mois)
+        .group_by(DateDimension.mois, DateDimension.nom_mois)
         .where(DateDimension.trimestre == target_quarter)
         .where(DateDimension.annee == target_year)
         .where(~DateDimension.est_ferie)
@@ -291,7 +292,12 @@ def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> st
     workbook = xlsxwriter.Workbook(f"data/weekly_reports/{filename}.xlsx")
     date_format = workbook.add_format({"num_format": "yyyy-mm-dd"})
 
-    engine = get_engine()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
     logger.info("Fetching data from database")
     with Session(engine) as session:
         services = session.execute(select(DimService.id, DimService.name)).all()
@@ -382,7 +388,12 @@ def generate_monthly_excel(target_month: int, target_year: int, filename: str) -
     workbook = xlsxwriter.Workbook(f"data/monthly_reports/{filename}.xlsx")
     date_format = workbook.add_format({"num_format": "yyyy-mm-dd"})
 
-    engine = get_engine()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
     logger.info("Fetching data from database")
 
     with Session(engine) as session:
@@ -433,7 +444,7 @@ def generate_monthly_excel(target_month: int, target_year: int, filename: str) -
             ]
 
             # Add a title in the first row
-            title = f"Rapport mensuel - {service.name}"
+            title = f"Rapport du mois {target_month} - {service.name}"
             title_format = workbook.add_format(
                 {"align": "center", "bold": True, "font_size": 14}
             )
@@ -460,6 +471,95 @@ def generate_monthly_excel(target_month: int, target_year: int, filename: str) -
 
     workbook.close()
     return f"data/monthly_reports/{filename}.xlsx"
+
+
+@task
+def generate_quarterly_excel(
+    target_quarter: int, target_year: int, filename: str
+) -> str:
+    logger = get_run_logger()
+
+    os.makedirs("data/quarterly_reports/", exist_ok=True)
+    workbook = xlsxwriter.Workbook(f"data/quarterly_reports/{filename}.xlsx")
+
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    logger.info("Fetching data from database")
+
+    with Session(engine) as session:
+        services = session.execute(select(DimService.id, DimService.name)).all()
+        for service in services:
+            stmt = (
+                select(
+                    DateDimension.mois,
+                    DateDimension.nom_mois,
+                    func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+                    (
+                        func.round(
+                            func.sum((~DailyAttendance.present).cast(Integer))
+                            * 100.0
+                            / func.count(DimEmployee.id),
+                            2,
+                        )
+                    ).label("absence_percentage"),
+                )
+                .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+                .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+                .join(DimService, DimService.id == DimEmployee.service_id)
+                .group_by(DateDimension.mois, DateDimension.nom_mois)
+                .where(DateDimension.trimestre == target_quarter)
+                .where(~DateDimension.est_ferie)
+                .where(DateDimension.annee == target_year)
+                .where(DateDimension.jour_semaine.not_in([6, 7]))
+                .where(DimService.id == service.id)
+                .order_by(DateDimension.mois)
+            )
+
+            table = session.execute(stmt).all()
+
+            cleaned_name = "".join(
+                [c for c in service.name if c not in ["'", "/", '"', "@"]]
+            )
+
+            worksheet_name = cleaned_name[:31]
+            worksheet = workbook.add_worksheet(name=worksheet_name)
+            worksheet.set_column(0, 0, 12)  # Date column
+            worksheet.set_column(1, 1, 10)  # Day name
+            worksheet.set_column(2, 2, 14)  # Absences
+            worksheet.set_column(3, 3, 14)  # Other columns
+
+            headers = [
+                "Mois",
+                "Nom mois",
+                "Nombre d'absences",
+                "Absence %",
+            ]
+
+            title = f"Rapport du trimestre {target_quarter} - {service.name}"
+            title_format = workbook.add_format(
+                {"align": "center", "bold": True, "font_size": 14}
+            )
+            worksheet.merge_range(0, 0, 0, len(headers) - 1, title, title_format)
+
+            for col, header in enumerate(headers):
+                worksheet.write(1, col, header)
+
+            for row_idx, row in enumerate(table, start=2):
+                month = row[0]
+                month_name = row[1]
+                absence = row[2]
+                absence_percentage = row[3]
+                worksheet.write(row_idx, 0, month)
+                worksheet.write(row_idx, 1, month_name)
+                worksheet.write(row_idx, 2, absence)
+                worksheet.write(row_idx, 3, absence_percentage)
+
+    workbook.close()
+    return f"data/quarterly_reports/{filename}.xlsx"
 
 
 if __name__ == "__main__":

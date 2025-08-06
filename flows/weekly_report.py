@@ -6,6 +6,7 @@ from tasks.utils import fetch_weekly_data, generate_weekly_excel
 from email_service.email_generator import generate_weekly_report_html
 from email_service.email_sender import send_daily_email
 from database.models import EmailData
+from flows import RECEIVER_EMAILS
 
 
 def get_last_workweek() -> Tuple[date, date]:
@@ -37,7 +38,7 @@ def weekly_report():
     html_report = generate_weekly_report_html(weekly_data, start_date, end_date)
 
     email_data = EmailData(
-        receiver_emails=["kiretori2003@gmail.com"],
+        receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Hebdomadaire",
         html_content=html_report,
         report_file_path=f"{xlsx_filepath}",

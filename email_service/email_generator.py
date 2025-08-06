@@ -336,3 +336,97 @@ def generate_monthly_report_html(
     </html>
     """
     return html_report
+
+
+@task
+def generate_quarterly_report_html(
+    quarterly_data: Sequence[Row[Tuple[int, str, int, Any]]],
+    quarter: int,
+    year: int,
+) -> str:
+    table_rows = ""
+    for month, month_name, abs_count, abs_percentage in quarterly_data:
+        table_rows += f"""
+        <tr>
+            <td>{month}</td>
+            <td>{month_name}</td>
+            <td>{abs_count}</td>
+            <td>{abs_percentage}%</td>
+        </tr>
+        """
+
+    html_report = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Rapport du trimestre {quarter} - {year}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f9fafb;
+                padding: 30px;
+                margin: 0;
+                color: #1f2937;
+            }}
+            .container {{
+                max-width: 800px;
+                margin: auto;
+                background-color: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+                padding: 30px;
+            }}
+            h2 {{
+                text-align: center;
+                color: #111827;
+                margin-bottom: 30px;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }}
+            th, td {{
+                padding: 12px 15px;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 14px;
+                text-align: left;
+                color: #1f2937;
+            }}
+            th {{
+                background-color: #f3f4f6;
+                font-weight: 600;
+            }}
+            .footer {{
+                text-align: center;
+                font-size: 12px;
+                color: #6b7280;
+                margin-top: 40px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Rapport des absences - Q{quarter} {year}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mois</th>
+                        <th>Nom mois</th>
+                        <th>Nombre d'absences</th>
+                        <th>Pourcentage d'absence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+            <div class="footer">
+                Généré automatiquement par le système WorkReport
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_report
