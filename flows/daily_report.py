@@ -14,6 +14,7 @@ from tasks.utils import (
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from datetime import date
+from flows import RECEIVER_EMAILS
 
 
 def generate_daily_flow_name() -> str:
@@ -83,7 +84,7 @@ def daily_report(target_date_id: int | None = None):
     html_report = generate_daily_report_html(daily_data)
 
     email_data = EmailData(
-        receiver_emails=["kiretori2003@gmail.com"],
+        receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Quotidien",
         html_content=html_report,
         report_file_path=f"{csv_filepath}",

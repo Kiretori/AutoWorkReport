@@ -11,7 +11,7 @@ from database.models import (
     DimService,
 )
 from prefect import task
-from prefect.logging import get_run_logger, disable_run_logger
+from prefect.logging import get_run_logger
 from database.db import get_engine
 import xlsxwriter
 
@@ -212,6 +212,42 @@ def fetch_quarterly_data(
         return session.execute(stmt).all()
 
 
+@task
+def fetch_yearly_data(target_year: int) -> Sequence[Row[Tuple[int, str, int, Any]]]:
+    logger = get_run_logger()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    stmt = (
+        select(
+            DateDimension.mois,
+            DateDimension.nom_mois,
+            func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+            (
+                func.round(
+                    func.sum((~DailyAttendance.present).cast(Integer))
+                    * 100.0
+                    / func.count(DimEmployee.id),
+                    2,
+                )
+            ).label("absence_percentage"),
+        )
+        .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+        .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+        .group_by(DateDimension.mois, DateDimension.nom_mois)
+        .where(DateDimension.annee == target_year)
+        .where(~DateDimension.est_ferie)
+        .where(DateDimension.jour_semaine.not_in([6, 7]))
+        .order_by(DateDimension.mois)
+    )
+
+    with Session(engine) as session:
+        return session.execute(stmt).all()
+
+
 # *--------------------------------- CSV / EXCEL generation -------------------------------------*
 
 
@@ -340,11 +376,11 @@ def generate_weekly_excel(start_date: date, end_date: date, filename: str) -> st
             worksheet_name = cleaned_name[:31]
             worksheet = workbook.add_worksheet(name=worksheet_name)
             worksheet.set_column(0, 0, 12)  # Date column
-            worksheet.set_column(1, 1, 10)  # Day name
-            worksheet.set_column(2, 2, 8)  # Férié
-            worksheet.set_column(3, 3, 14)  # Absences
-            worksheet.set_column(4, 4, 25)  # Total employees
-            worksheet.set_column(5, 5, 15)  # Other columns
+            worksheet.set_column(1, 1, 12)  # Day name
+            worksheet.set_column(2, 2, 10)  # Férié
+            worksheet.set_column(3, 3, 16)  # Absences
+            worksheet.set_column(4, 4, 26)  # Total employees
+            worksheet.set_column(5, 5, 16)  # Other columns
 
             headers = [
                 "Date",
@@ -431,10 +467,10 @@ def generate_monthly_excel(target_month: int, target_year: int, filename: str) -
 
             worksheet_name = cleaned_name[:31]
             worksheet = workbook.add_worksheet(name=worksheet_name)
-            worksheet.set_column(0, 0, 12)  # Date column
-            worksheet.set_column(1, 1, 10)  # Day name
-            worksheet.set_column(2, 2, 14)  # Absences
-            worksheet.set_column(3, 3, 14)  # Other columns
+            worksheet.set_column(0, 0, 12)
+            worksheet.set_column(1, 1, 12)
+            worksheet.set_column(2, 2, 16)
+            worksheet.set_column(3, 3, 16)
 
             headers = [
                 "Date",
@@ -527,10 +563,10 @@ def generate_quarterly_excel(
 
             worksheet_name = cleaned_name[:31]
             worksheet = workbook.add_worksheet(name=worksheet_name)
-            worksheet.set_column(0, 0, 12)  # Date column
-            worksheet.set_column(1, 1, 10)  # Day name
-            worksheet.set_column(2, 2, 14)  # Absences
-            worksheet.set_column(3, 3, 14)  # Other columns
+            worksheet.set_column(0, 0, 12)
+            worksheet.set_column(1, 1, 12)
+            worksheet.set_column(2, 2, 16)
+            worksheet.set_column(3, 3, 16)
 
             headers = [
                 "Mois",
@@ -562,8 +598,87 @@ def generate_quarterly_excel(
     return f"data/quarterly_reports/{filename}.xlsx"
 
 
-if __name__ == "__main__":
-    with disable_run_logger():
-        service_tables = generate_weekly_excel.fn(
-            date(2025, 7, 7), date(2025, 7, 11), "test"
-        )
+@task
+def generate_yearly_excel(target_year: int, filename: str) -> str:
+    logger = get_run_logger()
+
+    os.makedirs("data/yearly_reports/", exist_ok=True)
+    workbook = xlsxwriter.Workbook(f"data/yearly_reports/{filename}.xlsx")
+
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    logger.info("Fetching data from database")
+
+    with Session(engine) as session:
+        services = session.execute(select(DimService.id, DimService.name)).all()
+        for service in services:
+            stmt = (
+                select(
+                    DateDimension.mois,
+                    DateDimension.nom_mois,
+                    func.sum((~DailyAttendance.present).cast(Integer)).label("absence"),
+                    (
+                        func.round(
+                            func.sum((~DailyAttendance.present).cast(Integer))
+                            * 100.0
+                            / func.count(DimEmployee.id),
+                            2,
+                        )
+                    ).label("absence_percentage"),
+                )
+                .join(DailyAttendance, DateDimension.date_id == DailyAttendance.date_id)
+                .join(DimEmployee, DimEmployee.id == DailyAttendance.id_employee)
+                .join(DimService, DimService.id == DimEmployee.service_id)
+                .group_by(DateDimension.mois, DateDimension.nom_mois)
+                .where(~DateDimension.est_ferie)
+                .where(DateDimension.annee == target_year)
+                .where(DateDimension.jour_semaine.not_in([6, 7]))
+                .where(DimService.id == service.id)
+                .order_by(DateDimension.mois)
+            )
+
+            table = session.execute(stmt).all()
+
+            cleaned_name = "".join(
+                [c for c in service.name if c not in ["'", "/", '"', "@"]]
+            )
+
+            worksheet_name = cleaned_name[:31]
+            worksheet = workbook.add_worksheet(name=worksheet_name)
+            worksheet.set_column(0, 0, 12)
+            worksheet.set_column(1, 1, 12)
+            worksheet.set_column(2, 2, 16)
+            worksheet.set_column(3, 3, 16)
+
+            headers = [
+                "Mois",
+                "Nom mois",
+                "Nombre d'absences",
+                "Absence %",
+            ]
+
+            title = f"Rapport de l'année {target_year} - {service.name}"
+            title_format = workbook.add_format(
+                {"align": "center", "bold": True, "font_size": 14}
+            )
+            worksheet.merge_range(0, 0, 0, len(headers) - 1, title, title_format)
+
+            for col, header in enumerate(headers):
+                worksheet.write(1, col, header)
+
+            for row_idx, row in enumerate(table, start=2):
+                month = row[0]
+                month_name = row[1]
+                absence = row[2]
+                absence_percentage = row[3]
+                worksheet.write(row_idx, 0, month)
+                worksheet.write(row_idx, 1, month_name)
+                worksheet.write(row_idx, 2, absence)
+                worksheet.write(row_idx, 3, absence_percentage)
+
+    workbook.close()
+    return f"data/yearly_reports/{filename}.xlsx"
