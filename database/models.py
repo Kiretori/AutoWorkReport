@@ -235,7 +235,7 @@ class WeeklyReportData:
 
 @dataclass(frozen=True)
 class EmailData:
-    receiver_emails: List[str]
+    receiver_emails: List[str] | None
     subject: str
     html_content: str
     report_file_path: str | None

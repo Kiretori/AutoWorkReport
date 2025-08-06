@@ -4,11 +4,40 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from typing import List
 from database.models import EmailData
 from dotenv import load_dotenv
 import os
 from prefect import task
-from prefect.logging import get_run_logger
+from prefect.logging import get_run_logger, disable_run_logger
+from database.db import get_engine
+from sqlalchemy.orm import aliased, Session
+from sqlalchemy import select
+from database.models import DimEmployee
+
+
+@task
+def extract_receiver_emails() -> List[str]:
+    logger = get_run_logger()
+    try:
+        engine = get_engine()
+    except Exception as e:
+        logger.error(f"Error while connecting to the database: {e}")
+        exit(1)
+
+    manager = aliased(DimEmployee)
+    employee = aliased(DimEmployee)
+
+    with Session(engine) as session:
+        return list(
+            session.execute(
+                select(manager.email)
+                .join(employee, employee.hierarchical_manager_id == manager.id)
+                .distinct()
+            )
+            .scalars()
+            .all()
+        )
 
 
 @task(retries=3, timeout_seconds=20)
@@ -26,10 +55,15 @@ def send_daily_email(email_data: EmailData):
         logger.error("Please set them before running the script for security reasons.")
         exit()
 
+    if email_data.receiver_emails is None:
+        receiver_emails = extract_receiver_emails()
+    else:
+        receiver_emails = email_data.receiver_emails
+
     # Email Content
     message = MIMEMultipart("alternative")
     message["From"] = sender_email
-    message["To"] = ", ".join(email_data.receiver_emails)
+    message["To"] = ", ".join(receiver_emails)
     message["Subject"] = email_data.subject
 
     # Attach html to the message
@@ -64,14 +98,12 @@ def send_daily_email(email_data: EmailData):
     context.minimum_version = ssl.TLSVersion.TLSv1_2
 
     # Send the Email
-    logger.info(
-        f"Attempting to send email from {sender_email} to {email_data.receiver_emails}..."
-    )
+    logger.info(f"Attempting to send email from {sender_email} to {receiver_emails}...")
     try:
         with smtplib.SMTP(smtp_server, port) as server:
             server.starttls(context=context)  # Use secure TLS connection
             server.login(sender_email, app_password)
-            server.sendmail(sender_email, email_data.receiver_emails, email_text)
+            server.sendmail(sender_email, receiver_emails, email_text)
         logger.info("Email sent successfully!")
     except smtplib.SMTPAuthenticationError as e:
         logger.error(
@@ -82,3 +114,9 @@ def send_daily_email(email_data: EmailData):
         )
     except Exception as e:
         logger.error(f"An error occurred while sending the email: {e}")
+
+
+if __name__ == "__main__":
+    with disable_run_logger():
+        for email in extract_receiver_emails.fn():
+            print(email)
