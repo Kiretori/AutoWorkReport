@@ -100,6 +100,8 @@ services:
       DATABASE_URL_LOCAL: ${DATABASE_URL_LOCAL}
       GMAIL_USER: touyar.wassim2003@gmail.com
       GMAIL_APP_PASS: fhoodhtnwlhnnclz 
+    volumes:
+      - flow_data:/app/data
     restart: always
     networks:
       - default
@@ -108,3 +110,4 @@ volumes:
   postgres_data:
   redis_data:
   hr_postgres_data:
+  flow_data:
