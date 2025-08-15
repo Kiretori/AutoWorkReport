@@ -1,6 +1,10 @@
-.venv
+.venv/
 __pycache__
 *.pyc
 *.pyo
 *.pyd
 .env
+.vscode/
+data/
+.ruff_cache/
+temp/
