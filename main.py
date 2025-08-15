@@ -6,6 +6,7 @@ from flows.monthly_report import monthly_report
 from flows.quarterly_report import quarterly_report
 from flows.yearly_report import yearly_report
 
+
 if __name__ == "__main__":
     monthly_schedule = RRule("FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=20;BYMINUTE=0")
     quarterly_schedule = RRule(
