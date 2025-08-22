@@ -5,6 +5,7 @@ from flows.weekly_report import weekly_report
 from flows.monthly_report import monthly_report
 from flows.quarterly_report import quarterly_report
 from flows.yearly_report import yearly_report
+from flows.warehousing import refresh_warehouse
 
 
 if __name__ == "__main__":
@@ -29,6 +30,9 @@ if __name__ == "__main__":
     yearly_flow_deploy = yearly_report.to_deployment(
         name="yearly-report", schedule=yearly_schedule
     )
+    warehouse_deploy = refresh_warehouse.to_deployment(
+        name="warehouse-refresh", cron="0 23 * * *"
+    )
 
     serve(
         daily_flow_deploy,  # type: ignore
@@ -36,4 +40,5 @@ if __name__ == "__main__":
         monthly_flow_deploy,  # type: ignore
         quarterly_flow_deploy,  # type: ignore
         yearly_flow_deploy,  # type: ignore
+        warehouse_deploy,  # type: ignore
     )
