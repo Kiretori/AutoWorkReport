@@ -15,7 +15,7 @@ def generate_yearly_flow_name() -> str:
 
 @flow(
     flow_run_name=generate_yearly_flow_name,
-    thread_runner=ThreadPoolTaskRunner(max_workers=4),
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
 )
 def yearly_report(target_year: int | None = None):
     logger = get_run_logger()
