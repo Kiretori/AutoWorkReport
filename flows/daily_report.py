@@ -4,6 +4,7 @@ from email_service.email_sender import send_daily_email
 from email_service.email_generator import generate_daily_report_html
 from prefect import flow
 from prefect.logging import get_run_logger
+from prefect.task_runners import ThreadPoolTaskRunner
 from tasks.utils import (
     fetch_employees_per_date,
     fetch_absent_employees,
@@ -22,7 +23,10 @@ def generate_daily_flow_name() -> str:
     return f"daily_report-{date_id}"
 
 
-@flow(flow_run_name=generate_daily_flow_name)
+@flow(
+    flow_run_name=generate_daily_flow_name,
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
+)  # type: ignore
 def daily_report(target_date_id: int | None = None):
     logger = get_run_logger()
 
@@ -58,26 +62,31 @@ def daily_report(target_date_id: int | None = None):
 
     employees_daily_data = fetch_employees_per_date(target_date_id)
 
-    employee_count = total_employee_count()
+    employee_count = total_employee_count.submit()
 
     if employees_daily_data is None:
         logger.error("Couldn't fetch employee data")
         exit(1)
 
-    csv_filepath = generate_daily_csv(
+    employees_under_8_30h = fetch_employees_under_working.submit(
+        employees_daily_data, 8.5
+    )
+    employees_under_8h = fetch_employees_under_working.submit(employees_daily_data, 8)
+    employees_absent = fetch_absent_employees.submit(employees_daily_data)
+
+    csv_filepath = generate_daily_csv.submit(
         employees_daily_data, f"daily_report{target_date_id}"
     )
-    employees_under_8_30h = fetch_employees_under_working(employees_daily_data, 8.5)
-    employees_under_8h = fetch_employees_under_working(employees_daily_data, 8)
-    employees_absent = fetch_absent_employees(employees_daily_data)
 
-    absence_percentage = (len(employees_absent) / employee_count) * 100
+    absence_percentage = (
+        len(employees_absent.result()) / employee_count.result()
+    ) * 100
 
     daily_data = DailyReportData(
         date=target_date_id,
-        employees_absent=employees_absent,
-        employees_under_8_30h=employees_under_8_30h,
-        employees_under_8h=employees_under_8h,
+        employees_absent=employees_absent.result(),
+        employees_under_8_30h=employees_under_8_30h.result(),
+        employees_under_8h=employees_under_8h.result(),
         absence_percentage=absence_percentage,
     )
 
@@ -87,7 +96,7 @@ def daily_report(target_date_id: int | None = None):
         receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Quotidien",
         html_content=html_report,
-        report_file_path=f"{csv_filepath}",
+        report_file_path=f"{csv_filepath.result()}",
     )
 
     send_daily_email(email_data)

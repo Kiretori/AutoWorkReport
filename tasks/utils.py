@@ -72,6 +72,7 @@ def fetch_employees_under_working(
     return filtered_employees
 
 
+@task
 def total_employee_count() -> int:
     logger = get_run_logger()
     try:
