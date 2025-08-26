@@ -6,6 +6,7 @@ from email_service.email_generator import generate_quarterly_report_html
 from email_service.email_sender import send_daily_email
 from prefect import flow
 from prefect.logging import get_run_logger
+from prefect.task_runners import ThreadPoolTaskRunner
 from flows import RECEIVER_EMAILS
 
 
@@ -21,7 +22,10 @@ def generate_quarterly_flow_name() -> str:
     return f"quaterly-month-Q{quarter}-{year}"
 
 
-@flow(flow_run_name=generate_quarterly_flow_name)
+@flow(
+    flow_run_name=generate_quarterly_flow_name,
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
+)
 def quarterly_report(target_quarter: int | None, target_year: int | None):
     logger = get_run_logger()
 
@@ -31,23 +35,23 @@ def quarterly_report(target_quarter: int | None, target_year: int | None):
     if target_year is None:
         target_year = _target_year
 
-    quarterly_data = fetch_quarterly_data(target_quarter, target_year)
+    quarterly_data = fetch_quarterly_data.submit(target_quarter, target_year)
     logger.info("Generating Excel sheets")
-    xlsx_filepath = generate_quarterly_excel(
+    xlsx_filepath = generate_quarterly_excel.submit(
         target_quarter,
         target_year,
         f"quarterly_report_Q{target_quarter}_{target_year}",
     )
 
     html_report = generate_quarterly_report_html(
-        quarterly_data, target_quarter, target_year
+        quarterly_data.result(), target_quarter, target_year
     )
 
     email_data = EmailData(
         receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Trimestriel",
         html_content=html_report,
-        report_file_path=f"{xlsx_filepath}",
+        report_file_path=f"{xlsx_filepath.result()}",
     )
 
     send_daily_email(email_data)
