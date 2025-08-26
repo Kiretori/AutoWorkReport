@@ -1,5 +1,6 @@
 from typing import Tuple
 from prefect import flow
+from prefect.task_runners import ThreadPoolTaskRunner
 from prefect.logging import get_run_logger
 from datetime import date, timedelta
 from tasks.utils import fetch_weekly_data, generate_weekly_excel
@@ -23,25 +24,30 @@ def generate_weekly_flow_name() -> str:
     return f"weekly-report-{start}-{end}"
 
 
-@flow(flow_run_name=generate_weekly_flow_name)
+@flow(
+    flow_run_name=generate_weekly_flow_name,
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
+)
 def weekly_report():
     logger = get_run_logger()
 
     start_date, end_date = get_last_workweek()
-    weekly_data = fetch_weekly_data(start_date, end_date)
+    weekly_data = fetch_weekly_data.submit(start_date, end_date)
     logger.info("Generating Excel sheets")
-    xlsx_filepath = generate_weekly_excel(
+    xlsx_filepath = generate_weekly_excel.submit(
         start_date,
         end_date,
         f"weekly_report_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}",
     )
-    html_report = generate_weekly_report_html(weekly_data, start_date, end_date)
+    html_report = generate_weekly_report_html(
+        weekly_data.result(), start_date, end_date
+    )
 
     email_data = EmailData(
         receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Hebdomadaire",
         html_content=html_report,
-        report_file_path=f"{xlsx_filepath}",
+        report_file_path=f"{xlsx_filepath.result()}",
     )
 
     send_daily_email(email_data)

@@ -26,7 +26,7 @@ def generate_daily_flow_name() -> str:
 @flow(
     flow_run_name=generate_daily_flow_name,
     task_runner=ThreadPoolTaskRunner(max_workers=4),
-)  # type: ignore
+)
 def daily_report(target_date_id: int | None = None):
     logger = get_run_logger()
 
