@@ -1,6 +1,7 @@
 from typing import Tuple
 from prefect import flow
 from prefect.logging import get_run_logger
+from prefect.task_runners import ThreadPoolTaskRunner
 from email_service.email_generator import generate_monthly_report_html
 from email_service.email_sender import send_daily_email
 from tasks.utils import fetch_monthly_data, generate_monthly_excel
@@ -34,7 +35,10 @@ def generate_monthly_flow_name() -> str:
     return f"monthly-report-{month}-{year}"
 
 
-@flow(flow_run_name=generate_monthly_flow_name)
+@flow(
+    flow_run_name=generate_monthly_flow_name,
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
+)
 def monthly_report(target_month: int | None = None, target_year: int | None = None):
     logger = get_run_logger()
 
@@ -44,23 +48,23 @@ def monthly_report(target_month: int | None = None, target_year: int | None = No
     if target_year is None:
         target_year = _target_year
 
-    monthly_data = fetch_monthly_data(target_month, target_year)
+    monthly_data = fetch_monthly_data.submit(target_month, target_year)
     logger.info("Generating Excel sheets")
-    xlsx_filepath = generate_monthly_excel(
+    xlsx_filepath = generate_monthly_excel.submit(
         target_month,
         target_year,
         f"monthly_report_{target_month}_{target_year}",
     )
 
     html_report = generate_monthly_report_html(
-        monthly_data, months_map[target_month], target_year
+        monthly_data.result(), months_map[target_month], target_year
     )
 
     email_data = EmailData(
         receiver_emails=RECEIVER_EMAILS,
         subject="Rapport Mensuel",
         html_content=html_report,
-        report_file_path=f"{xlsx_filepath}",
+        report_file_path=f"{xlsx_filepath.result()}",
     )
 
     send_daily_email(email_data)
