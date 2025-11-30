@@ -1,0 +1,105 @@
+services: 
+  postgres: 
+    image: postgres:latest 
+    environment: 
+      POSTGRES_USER: prefect 
+      POSTGRES_PASSWORD: prefect 
+      POSTGRES_DB: prefect 
+    ports: 
+      - "5432:5432" 
+    volumes: 
+      - postgres_data:/var/lib/postgresql/data 
+    healthcheck: 
+      test: ["CMD-SHELL", "pg_isready -U prefect"] 
+      interval: 5s 
+      timeout: 5s 
+      retries: 5 
+  hr-db: 
+    image: postgres:latest 
+    environment: 
+      POSTGRES_USER: ${POSTGRES_USER} 
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} 
+      POSTGRES_DB: ${POSTGRES_DB} 
+    ports: 
+      - "5433:5432" 
+    volumes: 
+      - hr_postgres_data:/var/lib/postgresql/data 
+    healthcheck: 
+      test: ["CMD-SHELL", "pg_isready -U postgres"] 
+      interval: 5s 
+      timeout: 5s 
+      retries: 5 
+  redis: 
+    image: redis:7 
+    volumes: 
+      - redis_data:/data 
+    healthcheck: 
+      test: ["CMD-SHELL", "redis-cli ping"] 
+      interval: 5s 
+      timeout: 5s 
+      retries: 5 
+  prefect-server: 
+    image: prefecthq/prefect:3-latest 
+    depends_on: 
+      postgres: 
+        condition: service_healthy 
+      redis: 
+        condition: service_healthy 
+    environment: 
+      PREFECT_API_DATABASE_CONNECTION_URL: ${PREFECT_API_DATABASE_CONNECTION_URL} 
+      PREFECT_SERVER_API_HOST: 0.0.0.0 
+      PREFECT_MESSAGING_BROKER: prefect_redis.messaging 
+      PREFECT_MESSAGING_CACHE: prefect_redis.messaging 
+      PREFECT_REDIS_MESSAGING_HOST: redis 
+      PREFECT_REDIS_MESSAGING_PORT: 6379 
+      PREFECT_REDIS_MESSAGING_DB: 0 
+      PREFECT_UI_API_URL: http://localhost:4200/api 
+    command: prefect server start --no-services 
+    ports: 
+      - "4200:4200" 
+  prefect-services: 
+    image: prefecthq/prefect:3-latest 
+    depends_on: 
+      postgres: 
+        condition: service_healthy 
+      redis: 
+        condition: service_healthy 
+    environment: 
+      PREFECT_API_DATABASE_CONNECTION_URL: ${PREFECT_API_DATABASE_CONNECTION_URL} 
+      PREFECT_MESSAGING_BROKER: prefect_redis.messaging 
+      PREFECT_MESSAGING_CACHE: prefect_redis.messaging 
+      PREFECT_REDIS_MESSAGING_HOST: redis 
+      PREFECT_REDIS_MESSAGING_PORT: 6379 
+      PREFECT_REDIS_MESSAGING_DB: 0 
+    command: prefect server services start 
+  prefect-worker: 
+    image: prefecthq/prefect:3-latest 
+    depends_on: 
+      prefect-server: 
+        condition: service_started 
+    environment: 
+      PREFECT_API_URL: http://prefect-server:4200/api 
+    command: prefect worker start --pool local-pool 
+  flows: 
+    build: 
+      context: . 
+      dockerfile: Dockerfile 
+    depends_on: 
+      prefect-server: 
+        condition: service_started 
+      hr-db: 
+        condition: service_healthy 
+    environment: 
+      PREFECT_API_URL: http://prefect-server:4200/api 
+      DATABASE_URL_LOCAL: ${DATABASE_URL_LOCAL} 
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASS: ${GMAIL_APP_PASS}
+    volumes: 
+      - flow_data:/app/data 
+    networks: 
+      - default 
+volumes: 
+    postgres_data: 
+    redis_data: 
+    hr_postgres_data: 
+    flow_data:
